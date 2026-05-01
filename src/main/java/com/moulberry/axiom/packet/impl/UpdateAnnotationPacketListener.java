@@ -43,13 +43,16 @@ public class UpdateAnnotationPacketListener implements PacketHandler {
             }
         }
 
-        // Execute
-        serverPlayer.level().getServer().execute(() -> {
+        // Execute — Folia: dispatch to global region scheduler.
+        org.bukkit.Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
             try {
                 ServerAnnotations.handleUpdates(serverPlayer.level().getWorld(), actions);
             } catch (Throwable t) {
+                String errorMsg = t.getMessage();
+                if (errorMsg == null || errorMsg.isEmpty()) errorMsg = t.getClass().getSimpleName();
+                this.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error updating annotations", t);
                 serverPlayer.getBukkitEntity().kick(net.kyori.adventure.text.Component.text(
-                        "An error occured while updating annotations: " + t.getMessage()));
+                        "An error occurred while updating annotations: " + errorMsg));
             }
         });
     }

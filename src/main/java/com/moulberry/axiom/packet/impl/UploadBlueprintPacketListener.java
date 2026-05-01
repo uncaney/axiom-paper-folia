@@ -43,7 +43,7 @@ public class UploadBlueprintPacketListener implements PacketHandler {
         ServerPlayer serverPlayer = ((CraftPlayer)player).getHandle();
 
         if (this.plugin.isMismatchedDataVersion(serverPlayer.getUUID())) {
-            serverPlayer.level().getServer().execute(() -> {
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
                 serverPlayer.sendSystemMessage(Component.literal("Axiom+ViaVersion: This feature isn't supported. Switch your client version to " + VersionHelper.getVersion() + " to use this"));
             });
             friendlyByteBuf.writerIndex(friendlyByteBuf.readerIndex());
@@ -74,7 +74,8 @@ public class UploadBlueprintPacketListener implements PacketHandler {
 
         String pathName = pathStr.substring(0, pathStr.length()-3);
 
-        serverPlayer.level().getServer().execute(() -> {
+        // Folia: file I/O on async scheduler, then publish manifest on global region.
+        org.bukkit.Bukkit.getAsyncScheduler().runNow(this.plugin, asyncTask -> {
             try {
                 Path path = this.plugin.blueprintFolder.resolve(relative);
 
@@ -90,14 +91,17 @@ public class UploadBlueprintPacketListener implements PacketHandler {
                     return;
                 }
 
-                // Update registry
-                registry.blueprints().put("/" + pathName, rawBlueprint);
-
-                // Resend manifest
-                ServerBlueprintManager.sendManifest(serverPlayer.level().getServer().getPlayerList().getPlayers());
+                // Update registry + resend manifest on global region (player list iter is global state).
+                org.bukkit.Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> {
+                    registry.blueprints().put("/" + pathName, rawBlueprint);
+                    ServerBlueprintManager.sendManifest(serverPlayer.level().getServer().getPlayerList().getPlayers());
+                });
             } catch (Throwable t) {
+                String errorMsg = t.getMessage();
+                if (errorMsg == null || errorMsg.isEmpty()) errorMsg = t.getClass().getSimpleName();
+                this.plugin.getLogger().log(java.util.logging.Level.SEVERE, "Error uploading blueprint", t);
                 serverPlayer.getBukkitEntity().kick(net.kyori.adventure.text.Component.text(
-                        "An error occured while uploading blueprint: " + t.getMessage()));
+                        "An error occurred while uploading blueprint: " + errorMsg));
             }
         });
     }
