@@ -1,0 +1,29 @@
+[versions]
+# Dependencies
+bom-newest = "1.37"
+coreprotect = "22.4"
+plotsquared = "7.3.8"
+viaversion-api = "5.4.2-SNAPSHOT"
+worldguard-bukkit = "7.0.9-SNAPSHOT"
+zstd-jni = "1.5.5-4"
+luckperms = "5.4"
+
+# Plugins
+paperweight-userdev = "2.0.0-SNAPSHOT"
+run-paper = "3.0.2"
+shadow = "9.3.0"
+
+[libraries]
+bom-newest = { group = "com.intellectualsites.bom", name = "bom-newest", version.ref = "bom-newest" }
+coreprotect = { group = "local", name = "CoreProtect", version = "23.1" }
+plotsquared-bukkit = { group = "com.intellectualsites.plotsquared", name = "plotsquared-bukkit", version.ref = "plotsquared" }
+plotsquared-core = { group = "com.intellectualsites.plotsquared", name = "plotsquared-core", version.ref = "plotsquared" }
+viaversion-api = { group = "com.viaversion", name = "viaversion-api", version.ref = "viaversion-api" }
+worldguard-bukkit = { group = "com.sk89q.worldguard", name = "worldguard-bukkit", version.ref = "worldguard-bukkit" }
+zstd-jni = { group = "com.github.luben", name = "zstd-jni", version.ref = "zstd-jni" }
+luckperms = { group = "net.luckperms", name = "api", version.ref = "luckperms" }
+
+[plugins]
+paperweight-userdev = { id = "io.papermc.paperweight.userdev", version.ref = "paperweight-userdev" }
+run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

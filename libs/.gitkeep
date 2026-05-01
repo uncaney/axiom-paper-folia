@@ -1,0 +1,11 @@
+# Build-time third-party jars
+#
+# This directory is referenced by build.gradle.kts via `flatDir { dirs("libs") }`
+# for the CoreProtect compileOnly dep (group=local, name=CoreProtect, version=23.1).
+#
+# CoreProtect's Maven repo (maven.playpro.com) is Cloudflare-gated and 403s automated
+# requests, so CI downloads CoreProtect-CE-23.1.jar from Modrinth before `./gradlew build`.
+# See .forgejo/workflows/build.yml ("Fetch CoreProtect jar" step).
+#
+# Local dev: drop a CoreProtect-23.1.jar here manually if you want to build offline.
+# The file is gitignored (libs/*.jar in .gitignore) so it won't be committed.

@@ -1,0 +1,61 @@
+name: Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Forgejo matches `runs-on` against runner LABELS, never names.
+    # `coolify-linux-runner` advertises labels [ubuntu-latest, linux-x64].
+    runs-on: ubuntu-latest
+    # Forgejo Actions are JS-based and invoked via `docker exec node ...` — the
+    # container image MUST have node in PATH. eclipse-temurin / gradle:*-alpine
+    # don't, so we use node:20-bookworm and install JDK via setup-java.
+    container:
+      image: node:20-bookworm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Fetch CoreProtect jar
+        # CoreProtect's Maven repo (maven.playpro.com) is Cloudflare-gated and 403s
+        # automated requests. We side-load the CE jar from Modrinth into libs/ where
+        # build.gradle.kts's `flatDir { dirs("libs") }` picks it up as the
+        # `local:CoreProtect:23.1` compileOnly dep.
+        run: |
+          set -eu
+          mkdir -p libs
+          curl -fsSL --retry 3 --retry-delay 5 \
+            -o libs/CoreProtect-23.1.jar \
+            "https://cdn.modrinth.com/data/Lu3KuzdV/versions/HD2IvrxS/CoreProtect-CE-23.1.jar"
+          ls -la libs/
+
+      - name: Build
+        run: ./gradlew build --no-configuration-cache --stacktrace
+
+      - name: Upload plugin jar
+        # upload-artifact@v4 is NOT supported on Forgejo (GHES error). Pin to v3.
+        uses: actions/upload-artifact@v3
+        with:
+          name: axiom-paper-folia
+          path: build/libs/AxiomPaper-*-all.jar
+          if-no-files-found: error
