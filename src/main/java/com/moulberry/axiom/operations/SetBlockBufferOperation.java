@@ -266,7 +266,16 @@ public class SetBlockBufferOperation implements PendingOperation {
                                 } else if (blockEntity.getType().isValid(blockState)) {
                                     // Block entity is here and the type is correct
                                     blockEntity.setBlockState(blockState);
-                                    AxiomReflection.updateBlockEntityTicker(chunk, blockEntity);
+                                    try {
+                                        AxiomReflection.updateBlockEntityTicker(chunk, blockEntity);
+                                    } catch (Throwable t) {
+                                        // updateBlockEntityTicker → Level.addBlockEntityTicker →
+                                        // getCurrentWorldData().addBlockEntityTicker(). Null off-region.
+                                        // Skipping is safe: ticker gets reattached when the chunk's owning
+                                        // region next picks up the block-entity (chunk.blockEntities map
+                                        // already holds the entity).
+                                        if (!isFoliaThreadException(t)) throw t;
+                                    }
                                 } else {
                                     // Block entity type isn't correct, we need to recreate it
                                     try {
