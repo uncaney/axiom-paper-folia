@@ -107,7 +107,22 @@ public class RequestChunksOperation implements PendingOperation {
 
                 int x = ChunkPos.getX(chunkPos);
                 int z = ChunkPos.getZ(chunkPos);
-                this.chunkFutures.add(level.getWorld().getChunkAtAsync(x, z));
+                // Folia: getChunkAtAsync() is forbidden from a region tick thread (it throws
+                // "Cannot asynchronously load chunks" because blocking on chunk-load could deadlock
+                // the region). Hop to the async scheduler so the request is registered off any
+                // region thread; the resulting CompletableFuture is consumed normally below.
+                CompletableFuture<Chunk> future = new CompletableFuture<>();
+                org.bukkit.Bukkit.getAsyncScheduler().runNow(com.moulberry.axiom.AxiomPaper.PLUGIN, task -> {
+                    try {
+                        level.getWorld().getChunkAtAsync(x, z).whenComplete((chunk, ex) -> {
+                            if (ex != null) future.completeExceptionally(ex);
+                            else future.complete(chunk);
+                        });
+                    } catch (Throwable t) {
+                        future.completeExceptionally(t);
+                    }
+                });
+                this.chunkFutures.add(future);
             }
         }
 

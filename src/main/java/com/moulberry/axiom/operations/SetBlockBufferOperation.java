@@ -122,7 +122,24 @@ public class SetBlockBufferOperation implements PendingOperation {
                         this.chunkFutures.add(CompletableFuture.completedFuture(chunk));
                     }
                 } else {
-                    this.chunkFutures.add(level.getWorld().getChunkAtAsync(x, z).thenApply(chunk -> (LevelChunk) ((CraftChunk)chunk).getHandle(ChunkStatus.FULL)));
+                    // Folia: same trick as RequestChunksOperation — hop to async scheduler before
+                    // calling getChunkAtAsync, since calling it from the global region tick thread
+                    // throws IllegalStateException("Cannot asynchronously load chunks").
+                    CompletableFuture<LevelChunk> future = new CompletableFuture<>();
+                    org.bukkit.Bukkit.getAsyncScheduler().runNow(AxiomPaper.PLUGIN, task -> {
+                        try {
+                            level.getWorld().getChunkAtAsync(x, z).whenComplete((chunk, ex) -> {
+                                if (ex != null) {
+                                    future.completeExceptionally(ex);
+                                } else {
+                                    future.complete((LevelChunk) ((CraftChunk) chunk).getHandle(ChunkStatus.FULL));
+                                }
+                            });
+                        } catch (Throwable t) {
+                            future.completeExceptionally(t);
+                        }
+                    });
+                    this.chunkFutures.add(future);
                 }
             }
         }
