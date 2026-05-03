@@ -70,8 +70,17 @@ public class VersionHelper {
     }
 
     public static void sendCustomPayload(ServerPlayer serverPlayer, Identifier id, byte[] data) {
-        var payload = createCustomPayload(id, data);
-        serverPlayer.connection.send(new ClientboundCustomPayloadPacket(payload));
+        try {
+            java.util.logging.Logger.getLogger("AxiomPaper-Folia")
+                .info("[axiom-folia] send id=" + id + " bytes=" + data.length + " player=" + serverPlayer.getUUID());
+            var payload = createCustomPayload(id, data);
+            serverPlayer.connection.send(new ClientboundCustomPayloadPacket(payload));
+        } catch (Throwable t) {
+            java.util.logging.Logger.getLogger("AxiomPaper-Folia")
+                .log(java.util.logging.Level.SEVERE,
+                    "[axiom-folia] FAILED send id=" + id + " bytes=" + data.length + " player=" + serverPlayer.getUUID(), t);
+            throw t;
+        }
     }
 
     public static void sendCustomPayloadToAll(List<ServerPlayer> players, String id, byte[] data) {
@@ -83,10 +92,18 @@ public class VersionHelper {
             return;
         }
 
+        java.util.logging.Logger.getLogger("AxiomPaper-Folia")
+            .info("[axiom-folia] sendAll id=" + id + " bytes=" + data.length + " count=" + players.size());
         var payload = createCustomPayload(id, data);
         var packet = new ClientboundCustomPayloadPacket(payload);
         for (ServerPlayer player : players) {
-            player.connection.send(packet);
+            try {
+                player.connection.send(packet);
+            } catch (Throwable t) {
+                java.util.logging.Logger.getLogger("AxiomPaper-Folia")
+                    .log(java.util.logging.Level.SEVERE,
+                        "[axiom-folia] FAILED sendAll id=" + id + " player=" + player.getUUID(), t);
+            }
         }
     }
 

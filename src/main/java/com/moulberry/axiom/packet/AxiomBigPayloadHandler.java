@@ -31,6 +31,8 @@ import java.util.Map;
 
 public class AxiomBigPayloadHandler extends MessageToMessageDecoder<ByteBuf> {
 
+    private static final java.util.logging.Logger LOG = java.util.logging.Logger.getLogger("AxiomPaper-Folia");
+
     private final int payloadId;
     private final Connection connection;
     private final Map<String, PacketHandler> packetHandlers;
@@ -71,6 +73,9 @@ public class AxiomBigPayloadHandler extends MessageToMessageDecoder<ByteBuf> {
                 PacketHandler handler = this.packetHandlers.get(identifier);
                 if (handler != null) {
                     RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(in, player.registryAccess());
+                    int sz = buf.readableBytes();
+                    LOG.info("[axiom-folia] decode packet=" + identifier + " bytes=" + sz + " async=" + handler.handleAsync()
+                        + " player=" + player.getUUID());
                     if (handler.handleAsync()) {
                         callReceive(handler, player, buf, identifier);
                     } else {
@@ -88,6 +93,9 @@ public class AxiomBigPayloadHandler extends MessageToMessageDecoder<ByteBuf> {
             }
         } catch (Throwable t) {
             if (!(t instanceof IndexOutOfBoundsException && allowIndexOutOfBounds)) {
+                LOG.log(java.util.logging.Level.SEVERE,
+                    "[axiom-folia] decode() exception (will rethrow → client gets generic disconnect)",
+                    t);
                 // Skip remaining bytes
                 success = true;
                 in.skipBytes(in.readableBytes());
@@ -125,6 +133,25 @@ public class AxiomBigPayloadHandler extends MessageToMessageDecoder<ByteBuf> {
             pipeline.remove("axiom-big-payload-handler");
         }
         pipeline.addBefore("decoder", "axiom-big-payload-handler", handler);
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        // Catch netty pipeline exceptions before Paper's default handler shows the
+        // generic "An internal error occurred in your connection" to the client.
+        ServerPlayer player = this.connection.getPlayer();
+        String who = player != null ? player.getUUID().toString() : "<no-player>";
+        LOG.log(java.util.logging.Level.SEVERE,
+            "[axiom-folia] netty exceptionCaught for " + who, cause);
+        super.exceptionCaught(ctx, cause);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        ServerPlayer player = this.connection.getPlayer();
+        LOG.info("[axiom-folia] channelInactive for "
+            + (player != null ? player.getUUID().toString() : "<no-player>"));
+        super.channelInactive(ctx);
     }
 
     @Override

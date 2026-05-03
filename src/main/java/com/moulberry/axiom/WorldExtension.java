@@ -87,7 +87,13 @@ public class WorldExtension {
                 Component text = Component.text("Axiom: Warning, anti-xray is enabled. This will cause issues when copying blocks. Please turn anti-xray off");
                 player.sendMessage(text.color(NamedTextColor.RED));
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            // Was silenced upstream — log it now so we can see Folia thread-safety hits here too.
+            java.util.logging.Logger.getLogger("AxiomPaper-Folia")
+                .log(java.util.logging.Level.WARNING,
+                    "[axiom-folia] WorldExtension.onPlayerJoin chunkPacketBlockController check failed for "
+                        + player.getName() + " (chunk owned by another region?)", t);
+        }
     }
 
     public void tick(boolean sendMarkers, int maxChunkRelightsPerTick, int maxChunkSendsPerTick) {

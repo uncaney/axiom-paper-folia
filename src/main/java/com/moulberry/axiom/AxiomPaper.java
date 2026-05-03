@@ -244,7 +244,13 @@ public class AxiomPaper extends JavaPlugin implements Listener {
         } catch (IOException ignored) {}
         ServerHeightmaps.load(heightmapsPath);
 
-        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> tick(), 1, 1);
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+            try {
+                tick();
+            } catch (Throwable t) {
+                getLogger().log(java.util.logging.Level.SEVERE, "[axiom-folia] uncaught in tick()", t);
+            }
+        }, 1, 1);
 
         this.sendMarkers = this.configuration.getBoolean("send-markers");
         this.maxChunkRelightsPerTick = this.configuration.getInt("max-chunk-relights-per-tick");
@@ -789,23 +795,30 @@ public class AxiomPaper extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onChangedWorld(PlayerChangedWorldEvent event) {
-        this.clearCachedPermissionsFor(event.getPlayer().getUniqueId());
+        try {
+            getLogger().info("[axiom-folia] onChangedWorld player=" + event.getPlayer().getName()
+                + " uuid=" + event.getPlayer().getUniqueId() + " toWorld=" + event.getPlayer().getWorld().getName());
+            this.clearCachedPermissionsFor(event.getPlayer().getUniqueId());
 
-        if (!this.activeAxiomPlayers.contains(event.getPlayer().getUniqueId())) {
-            return;
+            if (!this.activeAxiomPlayers.contains(event.getPlayer().getUniqueId())) {
+                return;
+            }
+
+            World world = event.getPlayer().getWorld();
+
+            ServerWorldPropertiesRegistry properties = getOrCreateWorldProperties(world);
+
+            if (properties == null) {
+                VersionHelper.sendCustomPayload(event.getPlayer(), "axiom:register_world_properties", new byte[]{0});
+            } else {
+                properties.registerFor(this, event.getPlayer());
+            }
+
+            WorldExtension.onPlayerJoin(world, event.getPlayer());
+        } catch (Throwable t) {
+            getLogger().log(java.util.logging.Level.SEVERE,
+                "[axiom-folia] onChangedWorld threw for " + event.getPlayer().getName(), t);
         }
-
-        World world = event.getPlayer().getWorld();
-
-        ServerWorldPropertiesRegistry properties = getOrCreateWorldProperties(world);
-
-        if (properties == null) {
-            VersionHelper.sendCustomPayload(event.getPlayer(), "axiom:register_world_properties", new byte[]{0});
-        } else {
-            properties.registerFor(this, event.getPlayer());
-        }
-
-        WorldExtension.onPlayerJoin(world, event.getPlayer());
     }
 
     @EventHandler
