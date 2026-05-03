@@ -53,7 +53,12 @@ public class RequestChunksOperation implements PendingOperation {
     private final long id;
 
     private final LongArrayList getChunkFutures;
-    private  List<CompletableFuture<Chunk>> chunkFutures = new ArrayList<>();
+    // Folia: future stores the resolved LevelChunk (NMS handle) directly. The Chunk→LevelChunk
+    // conversion via CraftChunk.getHandle(ChunkStatus.FULL) used to live on the consumer side
+    // (line 138) and re-triggered Folia's "Cannot asynchronously load chunks" check on the
+    // global region tick thread. Now performed inside the whenComplete callback, which Folia
+    // fires on the chunk's owning region — safe context for the handle lookup.
+    private List<CompletableFuture<LevelChunk>> chunkFutures = new ArrayList<>();
     private final Long2ObjectMap<LongList> sendBlockEntityForPendingChunks;
     private final Long2ObjectMap<IntList> sendSectionsForPendingChunks;
     private final boolean sendBlockEntitiesInChunks;
@@ -110,13 +115,23 @@ public class RequestChunksOperation implements PendingOperation {
                 // Folia: getChunkAtAsync() is forbidden from a region tick thread (it throws
                 // "Cannot asynchronously load chunks" because blocking on chunk-load could deadlock
                 // the region). Hop to the async scheduler so the request is registered off any
-                // region thread; the resulting CompletableFuture is consumed normally below.
-                CompletableFuture<Chunk> future = new CompletableFuture<>();
+                // region thread. The Chunk→LevelChunk handle resolution is performed inside the
+                // whenComplete callback which Folia fires on the chunk's owning region — moving
+                // this off the consumer side avoids re-triggering the same check at .join() time.
+                CompletableFuture<LevelChunk> future = new CompletableFuture<>();
                 org.bukkit.Bukkit.getAsyncScheduler().runNow(com.moulberry.axiom.AxiomPaper.PLUGIN, task -> {
                     try {
                         level.getWorld().getChunkAtAsync(x, z).whenComplete((chunk, ex) -> {
-                            if (ex != null) future.completeExceptionally(ex);
-                            else future.complete(chunk);
+                            if (ex != null) {
+                                future.completeExceptionally(ex);
+                            } else {
+                                try {
+                                    LevelChunk lc = (LevelChunk) ((CraftChunk) chunk).getHandle(ChunkStatus.FULL);
+                                    future.complete(lc);
+                                } catch (Throwable t) {
+                                    future.completeExceptionally(t);
+                                }
+                            }
                         });
                     } catch (Throwable t) {
                         future.completeExceptionally(t);
@@ -126,16 +141,16 @@ public class RequestChunksOperation implements PendingOperation {
             }
         }
 
-        Iterator<CompletableFuture<Chunk>> chunkFutureIterator = this.chunkFutures.iterator();
+        Iterator<CompletableFuture<LevelChunk>> chunkFutureIterator = this.chunkFutures.iterator();
         while (chunkFutureIterator.hasNext()) {
-            CompletableFuture<Chunk> future = chunkFutureIterator.next();
+            CompletableFuture<LevelChunk> future = chunkFutureIterator.next();
             if (!future.isDone()) {
                 return;
             }
 
             chunkFutureIterator.remove();
 
-            LevelChunk chunk = (LevelChunk) ((CraftChunk)future.join()).getHandle(ChunkStatus.FULL);
+            LevelChunk chunk = future.join();
             long chunkPosLong = ChunkPos.pack(chunk.locX, chunk.locZ);
             LongList blockEntitiesInChunk = this.sendBlockEntityForPendingChunks.get(chunkPosLong);
             if (blockEntitiesInChunk != null) {
