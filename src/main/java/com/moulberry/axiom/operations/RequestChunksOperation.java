@@ -129,9 +129,22 @@ public class RequestChunksOperation implements PendingOperation {
                     long blockEntityPos = iterator.nextLong();
                     this.mutableBlockPos.set(blockEntityPos);
 
-                    BlockEntity blockEntity = chunk.getBlockEntity(this.mutableBlockPos, LevelChunk.EntityCreationType.CHECK);
+                    BlockEntity blockEntity;
+                    try {
+                        blockEntity = chunk.getBlockEntity(this.mutableBlockPos, LevelChunk.EntityCreationType.CHECK);
+                    } catch (Throwable t) {
+                        if (!isFoliaThreadException(t)) throw t;
+                        // Folia: chunk owned by another region — fall back to direct map read.
+                        blockEntity = chunk.blockEntities.get(this.mutableBlockPos);
+                    }
                     if (blockEntity != null) {
-                        CompoundTag tag = blockEntity.saveWithoutMetadata(this.serverPlayer.registryAccess());
+                        CompoundTag tag;
+                        try {
+                            tag = blockEntity.saveWithoutMetadata(this.serverPlayer.registryAccess());
+                        } catch (Throwable t) {
+                            if (!isFoliaThreadException(t)) throw t;
+                            continue; // saving touches per-region state too — skip this entity rather than kicking
+                        }
                         this.sendingBlockEntities.put(blockEntityPos, CompressedBlockEntity.compress(tag, baos));
                     }
                 }
@@ -191,5 +204,16 @@ public class RequestChunksOperation implements PendingOperation {
         this.finished = true;
     }
 
-
+    private static boolean isFoliaThreadException(Throwable t) {
+        String name = t.getClass().getName();
+        if (name.contains("WrongThreadException") || name.contains("TickThread")) return true;
+        if (t instanceof NullPointerException) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains("getCurrentWorldData") || msg.contains("capturedTileEntities"))) {
+                return true;
+            }
+        }
+        Throwable cause = t.getCause();
+        return cause != null && cause != t && isFoliaThreadException(cause);
+    }
 }

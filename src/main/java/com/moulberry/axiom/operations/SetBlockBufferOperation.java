@@ -241,7 +241,16 @@ public class SetBlockBufferOperation implements PendingOperation {
                             if (blockState.hasBlockEntity()) {
                                 blockPos.set(bx, by, bz);
 
-                                BlockEntity blockEntity = chunk.getBlockEntity(blockPos, LevelChunk.EntityCreationType.CHECK);
+                                BlockEntity blockEntity;
+                                try {
+                                    blockEntity = chunk.getBlockEntity(blockPos, LevelChunk.EntityCreationType.CHECK);
+                                } catch (Throwable t) {
+                                    if (!isFoliaThreadException(t)) throw t;
+                                    // Folia: chunk owned by another region — getBlockEntity() goes through
+                                    // Paper's getCurrentWorldData() which is null off the owning region.
+                                    // Fall back to a direct read of the chunk's block-entity map.
+                                    blockEntity = chunk.blockEntities.get(blockPos);
+                                }
 
                                 if (blockEntity == null) {
                                     // There isn't a block entity here, create it!
