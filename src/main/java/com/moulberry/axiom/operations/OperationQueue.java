@@ -59,7 +59,15 @@ public class OperationQueue {
                         }
                     } catch (Throwable t) {
                         ServerPlayer executor = operation.executor();
-                        executor.getBukkitEntity().kick(net.kyori.adventure.text.Component.text("An error occurred while processing operation: " + t.getMessage()));
+                        String errorMsg = t.getMessage();
+                        if (errorMsg == null || errorMsg.isEmpty()) errorMsg = t.getClass().getSimpleName();
+                        // Log the full stack — without this, the only on-disk evidence of the
+                        // crash was the kick reason, which made root-causing region-thread
+                        // failures on creaekaii painful (May 2026: the NPE on capturedTileEntities
+                        // had no stack in latest.log because we only logged t.getMessage()).
+                        com.moulberry.axiom.AxiomPaper.PLUGIN.getLogger().log(java.util.logging.Level.SEVERE,
+                            "Error processing axiom operation for " + executor.getUUID(), t);
+                        executor.getBukkitEntity().kick(net.kyori.adventure.text.Component.text("An error occurred while processing operation: " + errorMsg));
                         perWorldIterator.remove();
                     }
                 }

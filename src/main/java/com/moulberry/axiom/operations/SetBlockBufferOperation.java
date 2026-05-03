@@ -338,13 +338,24 @@ public class SetBlockBufferOperation implements PendingOperation {
     }
 
     /**
-     * Folia's TickThread guard throws a NoSuchElementException-like exception with
-     * a class name containing "WrongThreadException" or "TickThread". Detected by
-     * class name to stay decoupled from Folia internals.
+     * Folia surfaces "wrong region thread" failures in two flavours:
+     *  - A direct {@code WrongThreadException}/{@code TickThread} subclass when
+     *    Folia's guard fires on entry to a region-bound API.
+     *  - A downstream {@code NullPointerException} when Paper code that captures
+     *    block-entity changes per tick (via {@code ServerLevel#getCurrentWorldData()})
+     *    runs from a non-owning region thread. The world-data accessor returns
+     *    {@code null} → NPE on {@code capturedTileEntities}, observed in production
+     *    after deploying to creaekaii (May 2026).
      */
     private static boolean isFoliaThreadException(Throwable t) {
         String name = t.getClass().getName();
         if (name.contains("WrongThreadException") || name.contains("TickThread")) return true;
+        if (t instanceof NullPointerException) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains("getCurrentWorldData") || msg.contains("capturedTileEntities"))) {
+                return true;
+            }
+        }
         Throwable cause = t.getCause();
         return cause != null && cause != t && isFoliaThreadException(cause);
     }
